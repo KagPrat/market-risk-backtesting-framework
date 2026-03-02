@@ -15,4 +15,4 @@ Value at Risk (VaR) is one of the most widely used measures in financial risk ma
 ## Author
 
 **Your Name**  
-[LinkedIn]([https://www.linkedin.com/in/pratik-yallapragada/]) · [Email](yallap@rpi.edu)
+[LinkedIn](https://www.linkedin.com/in/pratik-yallapragada/) · [Email](yallap@rpi.edu)
