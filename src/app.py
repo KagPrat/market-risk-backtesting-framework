@@ -187,135 +187,135 @@ with tab1:
         fig.update_yaxes(title_text="VIX", row=2, col=1)
         st.plotly_chart(fig, use_container_width=True)
 
-    with tab2:
-        st.subheader("VaR Exceptions Over Time")
-        fig2 = go.Figure()
+with tab2:
+    st.subheader("VaR Exceptions Over Time")
+    fig2 = go.Figure()
 
-        for model, color in MODEL_COLORS.items():
-            if model not in var_df.columns:
-                continue
-            exc = backtest[model]["exceptions"]
-            exc_dates = exc[exc].index
-            exc_returns = port_ret.reindex(exc_dates)
-            fig2.add_trace(go.Scatter(
-                x=exc_dates,
-                y=exc_returns.values,
-                mode="markers",
-                marker=dict(color=color, size=6, symbol="x"),
-                name=f"{model} breach",
-            ))
-
+    for model, color in MODEL_COLORS.items():
+        if model not in var_df.columns:
+            continue
+        exc = backtest[model]["exceptions"]
+        exc_dates = exc[exc].index
+        exc_returns = port_ret.reindex(exc_dates)
         fig2.add_trace(go.Scatter(
-            x=port_ret.index,
-            y=port_ret.values,
-            line=dict(color="rgba(255,255,255,0.2)", width=0.8),
-            name="Returns",
-            showlegend=False,
+            x=exc_dates,
+            y=exc_returns.values,
+            mode="markers",
+            marker=dict(color=color, size=6, symbol="x"),
+            name=f"{model} breach",
         ))
 
+    fig2.add_trace(go.Scatter(
+        x=port_ret.index,
+        y=port_ret.values,
+        line=dict(color="rgba(255,255,255,0.2)", width=0.8),
+        name="Returns",
+        showlegend=False,
+    ))
+
+    for (pname, (s, e)), sc in zip(STRESS_PERIODS.items(), stress_colors):
+        fig2.add_vrect(
+            x0=s, x1=e, fillcolor=sc, line_width=0,
+            annotation_text=pname, annotation_position="top left",
+            annotation_font_size=10
+        )
+
+    fig2.update_layout(height=420, template="plotly_dark",
+                        margin=dict(l=0, r=0, t=20, b=0))
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.subheader("Kupiec POF Test Results")
+    kupiec_rows = []
+    for model in var_df.columns:
+        k = backtest[model]["kupiec"]
+        b = backtest[model]["basel"]
+        kupiec_rows.append({
+            "Model": model,
+            "Observations": k["n_obs"],
+            "Exceptions": k["n_exceptions"],
+            "Expected": k["expected_exceptions"],
+            "Breach Rate (%)": k["exception_rate"],
+            "LR Statistic": k["lr_stat"],
+            "p-value": k["p_value"],
+            "Reject H₀": "❌ Yes" if k["reject_h0"] else "✅ Pass",
+            "Basel Zone": b["zone"],
+        })
+    st.dataframe(
+        pd.DataFrame(kupiec_rows).set_index("Model"),
+        use_container_width=True,
+    )
+
+with tab3:
+    st.subheader("Exception Rates During Stress Periods")
+    fig3 = px.bar(
+        stress_df,
+        x="Period", y="Exception Rate (%)",
+        color="Model", barmode="group",
+        color_discrete_map=MODEL_COLORS,
+        template="plotly_dark",
+        text="Exception Rate (%)",
+    )
+    fig3.add_hline(
+        y=(1 - conf_used) * 100, line_dash="dash",
+        line_color="white",
+        annotation_text=f"Expected ({(1-conf_used)*100:.1f}%)"
+    )
+    fig3.update_layout(height=400, margin=dict(l=0, r=0, t=20, b=0))
+    st.plotly_chart(fig3, use_container_width=True)
+
+    st.subheader("Overshoot Ratio Heatmap")
+    pivot = stress_df.pivot(index="Period", columns="Model", values="Overshoot Ratio")
+    fig4 = px.imshow(
+        pivot, text_auto=True, aspect="auto",
+        color_continuous_scale="RdYlGn_r",
+        template="plotly_dark",
+    )
+    fig4.update_layout(height=300, margin=dict(l=0, r=0, t=40, b=0))
+    st.plotly_chart(fig4, use_container_width=True)
+
+    st.dataframe(stress_df.set_index(["Period", "Model"]), use_container_width=True)
+
+with tab4:
+    st.subheader("XGBoost Feature Importance")
+    importance = pd.Series(
+        ml_model.feature_importances_, index=FEATURE_COLS
+    ).sort_values(ascending=True)
+
+    fig5 = go.Figure(go.Bar(
+        x=importance.values,
+        y=importance.index,
+        orientation="h",
+        marker_color="#EF4444",
+    ))
+    fig5.update_layout(
+        height=420, template="plotly_dark",
+        xaxis_title="Importance Score",
+        margin=dict(l=0, r=0, t=20, b=0),
+    )
+    st.plotly_chart(fig5, use_container_width=True)
+
+    st.subheader("ML vs Parametric VaR Difference")
+    if "Parametric" in var_df.columns and "ML (XGBoost)" in var_df.columns:
+        diff = var_df["ML (XGBoost)"] - var_df["Parametric"]
+        fig6 = go.Figure()
+        fig6.add_trace(go.Scatter(
+            x=diff.index, y=diff.values,
+            fill="tozeroy",
+            fillcolor="rgba(239,68,68,0.2)",
+            line=dict(color="#EF4444", width=1),
+            name="ML − Parametric",
+        ))
         for (pname, (s, e)), sc in zip(STRESS_PERIODS.items(), stress_colors):
-            fig2.add_vrect(
+            fig6.add_vrect(
                 x0=s, x1=e, fillcolor=sc, line_width=0,
                 annotation_text=pname, annotation_position="top left",
                 annotation_font_size=10
             )
-
-        fig2.update_layout(height=420, template="plotly_dark",
-                           margin=dict(l=0, r=0, t=20, b=0))
-        st.plotly_chart(fig2, use_container_width=True)
-
-        st.subheader("Kupiec POF Test Results")
-        kupiec_rows = []
-        for model in var_df.columns:
-            k = backtest[model]["kupiec"]
-            b = backtest[model]["basel"]
-            kupiec_rows.append({
-                "Model": model,
-                "Observations": k["n_obs"],
-                "Exceptions": k["n_exceptions"],
-                "Expected": k["expected_exceptions"],
-                "Breach Rate (%)": k["exception_rate"],
-                "LR Statistic": k["lr_stat"],
-                "p-value": k["p_value"],
-                "Reject H₀": "❌ Yes" if k["reject_h0"] else "✅ Pass",
-                "Basel Zone": b["zone"],
-            })
-        st.dataframe(
-            pd.DataFrame(kupiec_rows).set_index("Model"),
-            use_container_width=True,
+        fig6.add_hline(y=0, line_color="white", line_dash="dash")
+        fig6.update_layout(height=380, template="plotly_dark",
+                            margin=dict(l=0, r=0, t=20, b=0))
+        st.plotly_chart(fig6, use_container_width=True)
+        st.caption(
+            "Positive = ML predicts higher risk than Parametric. "
+            "ML typically spikes during stress due to VIX and realized vol features."
         )
-
-    with tab3:
-        st.subheader("Exception Rates During Stress Periods")
-        fig3 = px.bar(
-            stress_df,
-            x="Period", y="Exception Rate (%)",
-            color="Model", barmode="group",
-            color_discrete_map=MODEL_COLORS,
-            template="plotly_dark",
-            text="Exception Rate (%)",
-        )
-        fig3.add_hline(
-            y=(1 - conf_used) * 100, line_dash="dash",
-            line_color="white",
-            annotation_text=f"Expected ({(1-conf_used)*100:.1f}%)"
-        )
-        fig3.update_layout(height=400, margin=dict(l=0, r=0, t=20, b=0))
-        st.plotly_chart(fig3, use_container_width=True)
-
-        st.subheader("Overshoot Ratio Heatmap")
-        pivot = stress_df.pivot(index="Period", columns="Model", values="Overshoot Ratio")
-        fig4 = px.imshow(
-            pivot, text_auto=True, aspect="auto",
-            color_continuous_scale="RdYlGn_r",
-            template="plotly_dark",
-        )
-        fig4.update_layout(height=300, margin=dict(l=0, r=0, t=40, b=0))
-        st.plotly_chart(fig4, use_container_width=True)
-
-        st.dataframe(stress_df.set_index(["Period", "Model"]), use_container_width=True)
-
-    with tab4:
-        st.subheader("XGBoost Feature Importance")
-        importance = pd.Series(
-            ml_model.feature_importances_, index=FEATURE_COLS
-        ).sort_values(ascending=True)
-
-        fig5 = go.Figure(go.Bar(
-            x=importance.values,
-            y=importance.index,
-            orientation="h",
-            marker_color="#EF4444",
-        ))
-        fig5.update_layout(
-            height=420, template="plotly_dark",
-            xaxis_title="Importance Score",
-            margin=dict(l=0, r=0, t=20, b=0),
-        )
-        st.plotly_chart(fig5, use_container_width=True)
-
-        st.subheader("ML vs Parametric VaR Difference")
-        if "Parametric" in var_df.columns and "ML (XGBoost)" in var_df.columns:
-            diff = var_df["ML (XGBoost)"] - var_df["Parametric"]
-            fig6 = go.Figure()
-            fig6.add_trace(go.Scatter(
-                x=diff.index, y=diff.values,
-                fill="tozeroy",
-                fillcolor="rgba(239,68,68,0.2)",
-                line=dict(color="#EF4444", width=1),
-                name="ML − Parametric",
-            ))
-            for (pname, (s, e)), sc in zip(STRESS_PERIODS.items(), stress_colors):
-                fig6.add_vrect(
-                    x0=s, x1=e, fillcolor=sc, line_width=0,
-                    annotation_text=pname, annotation_position="top left",
-                    annotation_font_size=10
-                )
-            fig6.add_hline(y=0, line_color="white", line_dash="dash")
-            fig6.update_layout(height=380, template="plotly_dark",
-                               margin=dict(l=0, r=0, t=20, b=0))
-            st.plotly_chart(fig6, use_container_width=True)
-            st.caption(
-                "Positive = ML predicts higher risk than Parametric. "
-                "ML typically spikes during stress due to VIX and realized vol features."
-            )
